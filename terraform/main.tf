@@ -20,6 +20,73 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+# Configuration Management Module
+module "config_manager" {
+  source = "./modules/config_manager"
+
+  project_name = var.project_name
+  environment  = var.environment
+  
+  # KMS Configuration
+  enable_key_rotation = var.enable_key_rotation
+  key_deletion_window = var.key_deletion_window
+  
+  # Override configuration with environment-specific values
+  override_config = {
+    # Lambda function configuration
+    lambda_functions = {
+      snowflake_extractor = {
+        memory_size = var.lambda_memory_size
+        timeout     = var.lambda_timeout
+      }
+    }
+    
+    # Glue job configuration
+    glue_jobs = {
+      bronze_to_silver = {
+        timeout_minutes = 60
+        max_retries     = 2
+        max_concurrent  = var.glue_number_of_workers
+      }
+      silver_to_gold = {
+        timeout_minutes = 90
+        max_retries     = 2
+        max_concurrent  = var.glue_number_of_workers
+      }
+    }
+    
+    # SageMaker configuration
+    sagemaker = {
+      training_instance_type = var.sagemaker_instance_type
+      inference_instance_type = var.sagemaker_instance_type
+    }
+    
+    # Monitoring configuration
+    monitoring = {
+      alarm_evaluation_periods = var.alarm_evaluation_periods
+      lambda_error_threshold = var.lambda_error_threshold
+      data_quality_threshold = var.data_quality_threshold
+      lambda_duration_threshold_ms = var.lambda_duration_threshold_ms
+      glue_job_duration_threshold_minutes = var.glue_job_duration_threshold_minutes
+    }
+  }
+  
+  # Secure configuration values
+  secure_config = {
+    snowflake_credentials = jsonencode({
+      account   = var.snowflake_account
+      username  = var.snowflake_username
+      password  = var.snowflake_password
+      warehouse = var.snowflake_warehouse
+      database  = var.snowflake_database
+      schema    = var.snowflake_schema
+      role      = var.snowflake_role
+    })
+  }
+  
+  tags = var.common_tags
+}
+
 # Networking Module
 module "networking" {
   source = "./modules/networking"

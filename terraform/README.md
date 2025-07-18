@@ -11,23 +11,34 @@ terraform/
 ├── outputs.tf                 # Global output definitions
 ├── versions.tf                # Terraform and provider version constraints
 ├── backend.tf                 # Backend configuration template
-├── backend-dev.hcl           # Development environment backend config
-├── terraform.tfvars.example  # Example variables file
-├── README.md                 # This file
-└── modules/                  # Terraform modules
-    ├── networking/           # VPC, subnets, security groups
+├── backend-dev.hcl            # Development environment backend config
+├── terraform.tfvars.example   # Example variables file
+├── .tflint.hcl                # TFLint configuration
+├── README.md                  # This file
+├── scripts/                   # Utility scripts
+│   ├── validate_terraform.sh  # Terraform validation script
+│   ├── validate_env_config.py # Environment config validation
+│   ├── deploy.sh              # Deployment script
+│   └── rollback.sh            # Rollback script
+├── tests/                     # Terraform tests
+│   ├── go.mod                 # Go module file for Terratest
+│   ├── storage_test.go        # Tests for storage module
+│   ├── networking_test.go     # Tests for networking module
+│   └── README.md              # Testing documentation
+└── modules/                   # Terraform modules
+    ├── networking/            # VPC, subnets, security groups
     │   ├── main.tf
     │   ├── variables.tf
     │   └── outputs.tf
-    ├── storage/              # S3 data lake and related storage
+    ├── storage/               # S3 data lake and related storage
     │   ├── main.tf
     │   ├── variables.tf
     │   └── outputs.tf
-    ├── compute/              # Lambda functions, Glue jobs
+    ├── compute/               # Lambda functions, Glue jobs
     │   ├── main.tf
     │   ├── variables.tf
     │   └── outputs.tf
-    └── ml/                   # SageMaker and ML infrastructure
+    └── ml/                    # SageMaker and ML infrastructure
         ├── main.tf
         ├── variables.tf
         └── outputs.tf
@@ -142,3 +153,63 @@ These outputs can be used by other Terraform configurations or application code.
 - NAT gateways can be disabled in development environments
 - SageMaker instances use cost-effective instance types by default
 - CloudWatch log retention is set to 14 days to control costs
+
+## Validation and Testing
+
+### Terraform Validation
+
+The project includes a validation script that checks Terraform configurations for best practices and common issues:
+
+```bash
+./scripts/validate_terraform.sh
+```
+
+This script performs the following checks:
+- Terraform formatting validation
+- Terraform configuration validation
+- TFLint checks for AWS best practices
+- Detection of potential hardcoded secrets
+- Verification of required files
+- Validation of variable declarations
+
+### Environment Configuration Validation
+
+To validate environment-specific configurations:
+
+```bash
+./scripts/validate_env_config.py --env dev
+./scripts/validate_env_config.py --env staging
+./scripts/validate_env_config.py --env prod
+```
+
+This script ensures that:
+- All required variables are defined for the environment
+- Environment-specific values are appropriate (e.g., stricter security in production)
+- Configuration values are consistent and valid
+
+### Infrastructure Testing
+
+The project uses [Terratest](https://terratest.gruntwork.io/) for infrastructure testing. To run the tests:
+
+```bash
+cd tests
+go test -v ./...
+```
+
+Tests validate:
+- Module configurations can be successfully applied
+- Resources are created with correct properties
+- Outputs match expected values
+- Security configurations are properly applied
+
+See the [tests/README.md](tests/README.md) file for more details on testing.
+
+### CI/CD Integration
+
+The validation and testing scripts are designed to be integrated into CI/CD pipelines:
+
+1. Run `validate_terraform.sh` during the validation stage
+2. Run `validate_env_config.py` for the target environment
+3. Run Terratest tests for critical modules
+4. Use `terraform plan` output for review
+5. Apply changes only after approval

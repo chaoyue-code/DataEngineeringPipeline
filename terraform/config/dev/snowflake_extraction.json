@@ -1,6 +1,6 @@
 {
-  "batch_size": 10000,
-  "max_batches": 100,
+  "batch_size": 5000,
+  "max_batches": 50,
   "max_retries": 3,
   "output_format": "parquet",
   "validation_rules": {

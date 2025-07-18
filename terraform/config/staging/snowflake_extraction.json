@@ -6,7 +6,7 @@
   "validation_rules": {
     "min_rows": 1,
     "required_columns": ["created_at", "updated_at"],
-    "non_null_columns": ["created_at"]
+    "non_null_columns": ["created_at", "updated_at"]
   },
   "queries": [
     {
@@ -25,6 +25,12 @@
       "name": "products",
       "sql": "SELECT product_id, product_name, category, price, description, created_at, updated_at FROM products WHERE updated_at > ? ORDER BY updated_at",
       "watermark_column": "updated_at",
+      "partition_by": "date"
+    },
+    {
+      "name": "inventory",
+      "sql": "SELECT inventory_id, product_id, warehouse_id, quantity, last_updated FROM inventory WHERE last_updated > ? ORDER BY last_updated",
+      "watermark_column": "last_updated",
       "partition_by": "date"
     }
   ]

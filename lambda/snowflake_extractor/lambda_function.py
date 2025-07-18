@@ -19,6 +19,7 @@ from typing import Dict, List, Any, Optional
 from botocore.exceptions import ClientError
 import time
 import random
+import jsonschema
 
 # Import custom modules
 from watermark_manager import WatermarkManager, BatchProcessor, DataValidator
@@ -26,6 +27,7 @@ from error_handler import (
     ComprehensiveErrorHandler, RetryStrategy, DeadLetterQueueHandler,
     CircuitBreaker, MonitoringIntegration, ErrorType
 )
+from utils.config_loader import ConfigLoader
 
 # Import and configure X-Ray SDK
 from aws_xray_sdk.core import xray_recorder
@@ -60,13 +62,51 @@ class SnowflakeExtractor:
         self.s3_client = boto3.client('s3')
         self.dynamodb = boto3.resource('dynamodb')
         
-        # Configuration from environment variables
+        # Get project and environment from environment variables
+        project_name = os.environ.get('PROJECT_NAME', 'snowflake-aws-pipeline')
+        environment = os.environ.get('ENVIRONMENT', 'dev')
+        
+        # Initialize configuration loader
+        self.config_loader = ConfigLoader(project_name, environment)
+        
+        # Load configuration with schema validation
+        with open('config_schema_v2.json', 'r') as schema_file:
+            config_schema = json.load(schema_file)
+        
+        # Default configuration values
+        default_config = {
+            "batch_size": 10000,
+            "max_batches": 100,
+            "max_retries": 3,
+            "output_format": "parquet",
+            "validation_rules": {
+                "min_rows": 1,
+                "required_columns": ["created_at", "updated_at"],
+                "non_null_columns": ["created_at"]
+            },
+            "queries": []
+        }
+        
+        # Load configuration from SSM Parameter Store with defaults
+        try:
+            self.config = self.config_loader.load_config_with_defaults(
+                "snowflake_extraction",
+                default_config,
+                config_schema
+            )
+            logger.info("Successfully loaded configuration from SSM Parameter Store")
+        except Exception as e:
+            logger.warning(f"Failed to load configuration from SSM Parameter Store: {str(e)}. Using environment variables.")
+            # Fall back to environment variables
+            self.config = default_config
+        
+        # Configuration from environment variables (fallback) or config
         self.secret_name = os.environ.get('SNOWFLAKE_SECRET_NAME')
         self.s3_bucket = os.environ.get('S3_BUCKET_NAME')
         self.watermark_table = os.environ.get('WATERMARK_TABLE_NAME')
-        self.max_retries = int(os.environ.get('MAX_RETRIES', '3'))
-        self.batch_size = int(os.environ.get('BATCH_SIZE', '10000'))
-        self.max_batches = int(os.environ.get('MAX_BATCHES', '100'))
+        self.max_retries = int(os.environ.get('MAX_RETRIES', str(self.config.get('max_retries', 3))))
+        self.batch_size = int(os.environ.get('BATCH_SIZE', str(self.config.get('batch_size', 10000))))
+        self.max_batches = int(os.environ.get('MAX_BATCHES', str(self.config.get('max_batches', 100))))
         
         self._connection = None
         self._credentials = None
