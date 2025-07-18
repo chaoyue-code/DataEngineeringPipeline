@@ -1,0 +1,173 @@
+{
+  "pipeline_name": "automated-ml-training",
+  "description": "Automated ML training pipeline with hyperparameter tuning and A/B testing",
+  
+  "training_config": {
+    "training_image": "763104351884.dkr.ecr.us-west-2.amazonaws.com/sklearn-inference:0.23-1-cpu-py3",
+    "instance_type": "ml.m5.large",
+    "instance_count": 1,
+    "volume_size": 20,
+    "max_runtime": 3600,
+    "enable_spot_instances": true,
+    "spot_instance_max_wait_time": 7200,
+    "hyperparameters": {
+      "model-type": "random_forest",
+      "n-estimators": "100",
+      "max-depth": "10",
+      "target-column": "target",
+      "feature-columns": "feature1,feature2,feature3"
+    },
+    "input_data_config": {
+      "train_channel": {
+        "data_source": "feature_store",
+        "feature_group_name": "customer-features-v1",
+        "query": "SELECT * FROM customer_features WHERE event_time >= '2024-01-01'",
+        "output_format": "parquet"
+      },
+      "validation_channel": {
+        "data_source": "s3",
+        "s3_uri": "s3://data-lake-bucket/gold/ml_features/validation/",
+        "content_type": "application/x-parquet"
+      }
+    },
+    "output_config": {
+      "s3_output_path": "s3://artifacts-bucket/training-output/",
+      "kms_key_id": "alias/sagemaker-key"
+    }
+  },
+  
+  "tuning_config": {
+    "enable_hyperparameter_tuning": true,
+    "objective_metric": "validation:accuracy",
+    "max_jobs": 10,
+    "max_parallel_jobs": 2,
+    "training_image": "763104351884.dkr.ecr.us-west-2.amazonaws.com/sklearn-inference:0.23-1-cpu-py3",
+    "instance_type": "ml.m5.large",
+    "parameter_ranges": {
+      "integer_parameters": [
+        {
+          "name": "n-estimators",
+          "min_value": "50",
+          "max_value": "200",
+          "scaling_type": "Linear"
+        },
+        {
+          "name": "max-depth",
+          "min_value": "3",
+          "max_value": "20",
+          "scaling_type": "Linear"
+        }
+      ],
+      "continuous_parameters": [
+        {
+          "name": "learning-rate",
+          "min_value": "0.001",
+          "max_value": "0.3",
+          "scaling_type": "Logarithmic"
+        }
+      ],
+      "categorical_parameters": [
+        {
+          "name": "model-type",
+          "values": ["random_forest", "gradient_boosting", "logistic_regression"]
+        }
+      ]
+    }
+  },
+  
+  "evaluation_config": {
+    "enable_evaluation": true,
+    "test_data_uri": "s3://data-lake-bucket/gold/ml_features/test/",
+    "cross_validate": true,
+    "cv_folds": 5,
+    "generate_plots": true,
+    "metrics": ["accuracy", "precision_weighted", "recall_weighted", "f1_weighted", "roc_auc"]
+  },
+  
+  "ab_testing_config": {
+    "enable_ab_testing": true,
+    "models": [
+      {
+        "name": "random_forest_baseline",
+        "model_path": "s3://artifacts-bucket/models/random_forest_baseline/",
+        "evaluation_results_path": "s3://artifacts-bucket/evaluation/random_forest_baseline/evaluation_results.json"
+      },
+      {
+        "name": "gradient_boosting_challenger",
+        "model_path": "s3://artifacts-bucket/models/gradient_boosting_challenger/",
+        "evaluation_results_path": "s3://artifacts-bucket/evaluation/gradient_boosting_challenger/evaluation_results.json"
+      }
+    ],
+    "statistical_tests": {
+      "alpha": 0.05,
+      "bootstrap_samples": 1000,
+      "confidence_level": 0.95
+    }
+  },
+  
+  "deployment_config": {
+    "enable_deployment": true,
+    "endpoint_name": "ml-model-endpoint",
+    "model_config": {
+      "inference_image": "763104351884.dkr.ecr.us-west-2.amazonaws.com/sklearn-inference:0.23-1-cpu-py3",
+      "model_type": "sklearn",
+      "environment_variables": {
+        "SAGEMAKER_PROGRAM": "inference.py",
+        "SAGEMAKER_SUBMIT_DIRECTORY": "/opt/ml/code"
+      }
+    },
+    "endpoint_config": {
+      "instance_type": "ml.t2.medium",
+      "initial_instance_count": 1,
+      "data_capture_config": {
+        "enable_capture": true,
+        "sampling_percentage": 100
+      }
+    },
+    "auto_scaling_config": {
+      "enabled": true,
+      "min_capacity": 1,
+      "max_capacity": 5,
+      "target_invocations_per_instance": 100,
+      "scale_out_cooldown": 300,
+      "scale_in_cooldown": 300
+    },
+    "monitoring_config": {
+      "enable_latency_alarm": true,
+      "latency_threshold_ms": 5000,
+      "enable_error_alarm": true,
+      "error_threshold": 10,
+      "enable_invocation_alarm": true,
+      "min_invocations_threshold": 1
+    },
+    "batch_transform_config": {
+      "enable_batch_transform": true,
+      "instance_type": "ml.m5.large",
+      "instance_count": 1,
+      "max_concurrent_transforms": 1,
+      "max_payload_in_mb": 6,
+      "batch_strategy": "MultiRecord"
+    }
+  },
+  
+  "monitoring_config": {
+    "enable_monitoring": true,
+    "data_capture": {
+      "enabled": true,
+      "sampling_percentage": 100
+    },
+    "model_quality_monitoring": {
+      "enabled": true,
+      "schedule": "cron(0 0 * * ? *)"
+    },
+    "data_quality_monitoring": {
+      "enabled": true,
+      "schedule": "cron(0 6 * * ? *)"
+    }
+  },
+  
+  "notification_config": {
+    "sns_topic_arn": "arn:aws:sns:us-west-2:123456789012:ml-pipeline-notifications",
+    "notify_on": ["training_start", "training_complete", "training_failed", "evaluation_complete", "ab_test_complete"]
+  }
+}

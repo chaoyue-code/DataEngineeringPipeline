@@ -1,0 +1,30 @@
+{
+  "extraction_config": {
+    "queries": [
+      {
+        "name": "customers",
+        "sql": "SELECT customer_id, first_name, last_name, email, phone, address, city, state, zip_code, created_at, updated_at FROM customers WHERE updated_at > ? ORDER BY updated_at",
+        "watermark_column": "updated_at",
+        "partition_by": "date"
+      },
+      {
+        "name": "orders",
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status, created_at, updated_at FROM orders WHERE created_at > ? ORDER BY created_at",
+        "watermark_column": "created_at",
+        "partition_by": "date"
+      },
+      {
+        "name": "products",
+        "sql": "SELECT product_id, product_name, category, price, description, created_at, updated_at FROM products WHERE updated_at > ? ORDER BY updated_at",
+        "watermark_column": "updated_at",
+        "partition_by": "date"
+      }
+    ],
+    "output_format": "parquet",
+    "validation_rules": {
+      "min_rows": 1,
+      "required_columns": ["created_at", "updated_at"],
+      "non_null_columns": ["created_at"]
+    }
+  }
+}

@@ -1,0 +1,45 @@
+# Example Terraform variables file
+# Copy this file to terraform.tfvars and customize for your environment
+
+# Global Configuration
+project_name = "snowflake-aws-pipeline"
+environment  = "dev"
+aws_region   = "ap-southeast-2"
+
+# Common tags applied to all resources
+common_tags = {
+  Owner       = "data-engineering-team"
+  CostCenter  = "engineering"
+  Application = "data-pipeline"
+}
+
+# Networking Configuration
+vpc_cidr                 = "10.0.0.0/16"
+public_subnet_cidrs      = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs     = ["10.0.10.0/24", "10.0.20.0/24"]
+database_subnet_cidrs    = ["10.0.30.0/24", "10.0.40.0/24"]
+enable_nat_gateway       = true
+enable_vpn_gateway       = false
+
+# Storage Configuration
+data_lake_bucket_name    = null  # Will be auto-generated if null
+enable_s3_versioning     = true
+enable_s3_encryption     = true
+bronze_lifecycle_days    = 90
+silver_lifecycle_days    = 365
+gold_lifecycle_days      = 2555
+
+# Compute Configuration
+lambda_runtime           = "python3.11"
+lambda_timeout           = 900
+lambda_memory_size       = 1024
+glue_version            = "4.0"
+glue_worker_type        = "G.1X"
+glue_number_of_workers  = 2
+
+# ML Configuration
+sagemaker_instance_type         = "ml.t3.medium"
+sagemaker_volume_size          = 20
+enable_sagemaker_encryption    = true
+feature_store_online_enabled   = true
+feature_store_offline_enabled  = true

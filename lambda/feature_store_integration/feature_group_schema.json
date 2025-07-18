@@ -1,0 +1,173 @@
+{
+  "feature_groups": {
+    "customer_features": {
+      "feature_group_name": "customer-features-v1",
+      "description": "Customer demographic and behavioral features",
+      "record_identifier_feature_name": "customer_id",
+      "event_time_feature_name": "event_time",
+      "enable_online_store": true,
+      "glue_database": "feature_store_db",
+      "feature_definitions": [
+        {
+          "FeatureName": "customer_id",
+          "FeatureType": "String"
+        },
+        {
+          "FeatureName": "event_time",
+          "FeatureType": "String"
+        },
+        {
+          "FeatureName": "age",
+          "FeatureType": "Integral"
+        },
+        {
+          "FeatureName": "income",
+          "FeatureType": "Fractional"
+        },
+        {
+          "FeatureName": "credit_score",
+          "FeatureType": "Integral"
+        },
+        {
+          "FeatureName": "total_purchases",
+          "FeatureType": "Integral"
+        },
+        {
+          "FeatureName": "avg_purchase_amount",
+          "FeatureType": "Fractional"
+        },
+        {
+          "FeatureName": "days_since_last_purchase",
+          "FeatureType": "Integral"
+        },
+        {
+          "FeatureName": "preferred_category",
+          "FeatureType": "String"
+        },
+        {
+          "FeatureName": "churn_risk_score",
+          "FeatureType": "Fractional"
+        }
+      ]
+    },
+    "product_features": {
+      "feature_group_name": "product-features-v1",
+      "description": "Product characteristics and performance features",
+      "record_identifier_feature_name": "product_id",
+      "event_time_feature_name": "event_time",
+      "enable_online_store": true,
+      "glue_database": "feature_store_db",
+      "feature_definitions": [
+        {
+          "FeatureName": "product_id",
+          "FeatureType": "String"
+        },
+        {
+          "FeatureName": "event_time",
+          "FeatureType": "String"
+        },
+        {
+          "FeatureName": "category",
+          "FeatureType": "String"
+        },
+        {
+          "FeatureName": "price",
+          "FeatureType": "Fractional"
+        },
+        {
+          "FeatureName": "rating",
+          "FeatureType": "Fractional"
+        },
+        {
+          "FeatureName": "review_count",
+          "FeatureType": "Integral"
+        },
+        {
+          "FeatureName": "sales_velocity",
+          "FeatureType": "Fractional"
+        },
+        {
+          "FeatureName": "inventory_level",
+          "FeatureType": "Integral"
+        },
+        {
+          "FeatureName": "seasonality_score",
+          "FeatureType": "Fractional"
+        },
+        {
+          "FeatureName": "profit_margin",
+          "FeatureType": "Fractional"
+        }
+      ]
+    },
+    "transaction_features": {
+      "feature_group_name": "transaction-features-v1",
+      "description": "Transaction-level features for real-time scoring",
+      "record_identifier_feature_name": "transaction_id",
+      "event_time_feature_name": "event_time",
+      "enable_online_store": true,
+      "glue_database": "feature_store_db",
+      "feature_definitions": [
+        {
+          "FeatureName": "transaction_id",
+          "FeatureType": "String"
+        },
+        {
+          "FeatureName": "event_time",
+          "FeatureType": "String"
+        },
+        {
+          "FeatureName": "customer_id",
+          "FeatureType": "String"
+        },
+        {
+          "FeatureName": "product_id",
+          "FeatureType": "String"
+        },
+        {
+          "FeatureName": "amount",
+          "FeatureType": "Fractional"
+        },
+        {
+          "FeatureName": "quantity",
+          "FeatureType": "Integral"
+        },
+        {
+          "FeatureName": "discount_applied",
+          "FeatureType": "Fractional"
+        },
+        {
+          "FeatureName": "payment_method",
+          "FeatureType": "String"
+        },
+        {
+          "FeatureName": "channel",
+          "FeatureType": "String"
+        },
+        {
+          "FeatureName": "fraud_score",
+          "FeatureType": "Fractional"
+        }
+      ]
+    }
+  },
+  "ingestion_configs": {
+    "batch_size": 100,
+    "max_retries": 3,
+    "retry_delay_seconds": 5,
+    "validation_enabled": true,
+    "lineage_tracking_enabled": true
+  },
+  "serving_configs": {
+    "online_store": {
+      "enabled": true,
+      "ttl_duration": "P30D"
+    },
+    "offline_store": {
+      "enabled": true,
+      "s3_prefix": "feature-store/offline",
+      "data_format": "parquet",
+      "compression": "snappy"
+    }
+  }
+}

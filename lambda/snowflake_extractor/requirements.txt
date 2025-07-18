@@ -1,0 +1,5 @@
+boto3
+snowflake-connector-python
+pandas
+pyarrow
+aws-xray-sdk
