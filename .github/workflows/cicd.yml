@@ -4,19 +4,37 @@ on:
   push:
     branches:
       - main
+      - develop
   pull_request:
     branches:
       - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      promote:
+        description: 'Promote from previous environment'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
-  test:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
@@ -24,40 +42,187 @@ jobs:
         run: |
           pip install -r lambda/snowflake_extractor/requirements.txt
           pip install -r lambda/snowflake_extractor/requirements-dev.txt
-      - name: Run unit tests
-        run: |
-          pytest lambda/snowflake_extractor/tests/
-          pytest lambda/data_quality_monitor/tests/
-          pytest lambda/feature_store_integration/tests/
+          pip install pytest pytest-cov flake8
 
-  deploy:
-    needs: test
+      - name: Lint code
+        run: |
+          flake8 lambda/ --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Validate Terraform
+        run: |
+          bash ./terraform/scripts/validate_terraform.sh
+        
+  test:
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r lambda/snowflake_extractor/requirements.txt
+          pip install -r lambda/snowflake_extractor/requirements-dev.txt
+          pip install pytest pytest-cov
+
+      - name: Run unit tests with coverage
+        run: |
+          pytest lambda/snowflake_extractor/tests/ --cov=lambda/snowflake_extractor
+          pytest lambda/data_quality_monitor/tests/ --cov=lambda/data_quality_monitor
+          pytest lambda/feature_store_integration/tests/ --cov=lambda/feature_store_integration
+          pytest lambda/ml_pipeline_orchestrator/tests/ --cov=lambda/ml_pipeline_orchestrator
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: |
+            .coverage
+            htmlcov/
+
+  deploy-dev:
+    if: github.ref == 'refs/heads/develop' || github.event.inputs.environment == 'dev'
+    needs: test
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v1
         with:
           terraform_version: 1.0.0
 
+      - name: Validate environment config
+        run: |
+          python ./terraform/scripts/validate_env_config.py --env dev
+        
       - name: Terraform Init
-        run: terraform init
+        run: |
+          terraform init -backend-config=backend-dev.hcl
         working-directory: ./terraform
 
       - name: Terraform Plan
-        run: terraform plan
+        run: |
+          terraform plan -var-file=terraform.tfvars.dev -out=tfplan
         working-directory: ./terraform
 
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
-        run: terraform apply -auto-approve
+        run: |
+          terraform apply -auto-approve tfplan
+        working-directory: ./terraform
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/main' || github.event.inputs.environment == 'staging'
+    needs: [test, deploy-dev]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.0.0
+
+      - name: Promote configuration from dev
+        if: github.event.inputs.promote == 'true'
+        run: |
+          bash ./terraform/scripts/manage_config.sh --action copy --type snowflake_extraction --source dev --target staging
+          bash ./terraform/scripts/manage_config.sh --action validate --type snowflake_extraction --source staging
+
+      - name: Validate environment config
+        run: |
+          python ./terraform/scripts/validate_env_config.py --env staging
+        
+      - name: Terraform Init
+        run: |
+          terraform init -backend-config=backend-staging.hcl
+        working-directory: ./terraform
+
+      - name: Terraform Plan
+        run: |
+          terraform plan -var-file=terraform.tfvars.staging -out=tfplan
+        working-directory: ./terraform
+
+      - name: Terraform Apply
+        run: |
+          terraform apply -auto-approve tfplan
+        working-directory: ./terraform
+
+  deploy-prod:
+    if: github.event.inputs.environment == 'prod'
+    needs: [test, deploy-staging]
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.0.0
+
+      - name: Promote configuration from staging
+        if: github.event.inputs.promote == 'true'
+        run: |
+          bash ./terraform/scripts/manage_config.sh --action copy --type snowflake_extraction --source staging --target prod
+          bash ./terraform/scripts/manage_config.sh --action validate --type snowflake_extraction --source prod
+
+      - name: Validate environment config
+        run: |
+          python ./terraform/scripts/validate_env_config.py --env prod
+        
+      - name: Terraform Init
+        run: |
+          terraform init -backend-config=backend-prod.hcl
+        working-directory: ./terraform
+
+      - name: Terraform Plan
+        run: |
+          terraform plan -var-file=terraform.tfvars.prod -out=tfplan
+        working-directory: ./terraform
+
+      - name: Manual approval
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ github.TOKEN }}
+          approvers: ${{ vars.PROD_APPROVERS }}
+          minimum-approvals: 2
+          issue-title: "Deploy to production"
+          issue-body: "Please approve or deny the deployment to production"
+          exclude-workflow-initiator-as-approver: false
+          
+      - name: Terraform Apply
+        run: |
+          terraform apply -auto-approve tfplan
         working-directory: ./terraform
